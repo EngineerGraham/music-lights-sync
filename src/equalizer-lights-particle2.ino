@@ -263,7 +263,7 @@ void loop() {
     } else if (shapeMode == 1) {
         for (int j = 0; j < numberLEDs; j++) {
             for (int i = 0; i < NUM_STRIPS; i++) {
-                if (abs(j - 55) < (numberLEDs * (percentFill[i] / 2.0) / 100.0)) {
+                if (abs(j - 55) < (numberLEDs * (percentFill[i] / 2.0) / 100.0) || j == 55) {
                     if (colorMode == 1) {
                         strips[i].setColorDimmed(j, red, green, blue, brightness);
                     }
