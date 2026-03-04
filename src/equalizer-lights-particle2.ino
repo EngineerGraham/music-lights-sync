@@ -120,6 +120,13 @@ int updateConfigVars(String args) {
     minSignalInterval = (unsigned long)configArray[20];  // Duration in milliseconds
     noiseFloorOffsetPercent = configArray[21];  // Noise floor offset percentage
 
+    // Rebuild config string to reflect current active values
+    config = "";
+    for (int i = 0; i < 22; i++) {
+        config += String((int)configArray[i]);
+        if (i < 21) config += ",";
+    }
+
     return 1;
 }
 
@@ -136,6 +143,7 @@ void setup() {
 
     Particle.function("LEDState1", turnOnLED);
     Particle.function("UpdateConfig", updateConfigVars);
+    Particle.variable("config", config);
 
     if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {  // Address 0x3C for 128x32
         Serial.println(F("SSD1306 allocation failed"));
