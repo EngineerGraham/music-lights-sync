@@ -4,6 +4,8 @@ A hobby project that turns music into a real-time LED light show using a Particl
 
 Seven NeoPixel LED strips each represent a frequency band from an MSGEQ7 graphic equalizer IC. Bass lights up one strip, treble lights up another, and everything in between gets its own channel.
 
+![Equalizer Demo](media/equalizer-demo.gif)
+
 ## Hardware
 
 - Particle Argon
