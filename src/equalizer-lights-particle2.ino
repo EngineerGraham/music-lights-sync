@@ -51,10 +51,18 @@ float noiseFloorOffsetPercent = 5.0;  // Default 5%, can be updated via config
 // Arrays to store the light values and net signals
 float lightValues[NUM_STRIPS];
 float netSignals[NUM_STRIPS];
+float percentFill[NUM_STRIPS];
+
+// Fire mode heat map
+uint8_t fireHeat[NUM_STRIPS][numberLEDs];
+
+// Strobe mode state
+unsigned long lastFlashTime = 0;
+bool isFlashing = false;
 
 //for rainbow color modes
 uint16_t hue = 0;
-uint16_t stripHues[NUM_STRIPS] = {0, 144, 288, 432, 576, 720, 864}; // For 7 strips, evenly distributed hues
+uint16_t stripHues[NUM_STRIPS] = {0, 40, 80, 120, 160, 200, 240}; // For 7 strips, closely spaced hues
 
 int loopNum = 0;
 
@@ -236,7 +244,6 @@ void loop() {
     // Scale lower and upper bounds, calculate percent fill
     float lowerScaled[NUM_STRIPS];
     float upperScaled[NUM_STRIPS];
-    float percentFill[NUM_STRIPS];
     for (int i = 0; i < NUM_STRIPS; i++) {
         lowerScaled[i] = (lowerBounds[i] * 4095.0) / 100.0;
         upperScaled[i] = (upperBounds[i] * 4095.0) / 100.0;
@@ -324,6 +331,106 @@ void updateStripColors() {
             }
             for (int i = 0; i < NUM_STRIPS; i++) {
                 stripHues[i]++;
+            }
+            break;
+
+        case 4:
+            // Fire/lava mode — tinted by configured RGB color
+            for (int s = 0; s < NUM_STRIPS; s++) {
+                // Cool down every cell slightly
+                for (int j = 0; j < numberLEDs; j++) {
+                    uint8_t cooldown = random(0, 3);
+                    fireHeat[s][j] = (fireHeat[s][j] > cooldown) ? fireHeat[s][j] - cooldown : 0;
+                }
+
+                // Drift heat upward
+                for (int j = numberLEDs - 1; j >= 2; j--) {
+                    fireHeat[s][j] = (fireHeat[s][j - 1] + fireHeat[s][j - 2]) / 2;
+                }
+
+                // Ignite new sparks near the bottom, intensity based on audio
+                int numSparks = (int)(percentFill[s] / 20.0) + 1;
+                for (int k = 0; k < numSparks; k++) {
+                    int pos = random(0, 8);
+                    int sparkHeat = (int)(percentFill[s] * 2.55);  // 0-255 based on fill
+                    fireHeat[s][pos] = constrain(fireHeat[s][pos] + sparkHeat, 0, 255);
+                }
+
+                // Map heat to color: blend from black -> base RGB -> white/yellow
+                for (int j = 0; j < numberLEDs; j++) {
+                    uint8_t heat = fireHeat[s][j];
+                    uint8_t r, g, b;
+                    if (heat < 128) {
+                        // Low heat: scale base RGB by heat
+                        float scale = heat / 128.0;
+                        r = (uint8_t)(red * scale);
+                        g = (uint8_t)(green * scale);
+                        b = (uint8_t)(blue * scale);
+                    } else {
+                        // High heat: blend from base RGB toward yellow/white
+                        float blend = (heat - 128) / 127.0;
+                        r = red + (uint8_t)((255 - red) * blend);
+                        g = green + (uint8_t)((255 - green) * blend);
+                        b = blue + (uint8_t)((min(blue + 30, 255) - blue) * blend);
+                    }
+                    r = (r * brightness) / 255;
+                    g = (g * brightness) / 255;
+                    b = (b * brightness) / 255;
+                    strips[s].setPixelColor(j, strips[0].Color(r, g, b));
+                }
+            }
+            break;
+
+        case 5:
+            // Strobe/flash mode — white flash when any band peaks
+            {
+                // Check if any band is near peak
+                bool peakDetected = false;
+                for (int i = 0; i < NUM_STRIPS; i++) {
+                    if (percentFill[i] >= 90.0) {
+                        peakDetected = true;
+                        break;
+                    }
+                }
+
+                if (peakDetected) {
+                    isFlashing = true;
+                    lastFlashTime = millis();
+                }
+
+                if (isFlashing && (millis() - lastFlashTime < 50)) {
+                    // White flash at full brightness
+                    uint32_t flashColor = strips[0].Color(brightness, brightness, brightness);
+                    for (int i = 0; i < numberLEDs; i++) {
+                        for (int s = 0; s < NUM_STRIPS; s++) {
+                            strips[s].setPixelColor(i, flashColor);
+                        }
+                    }
+                } else {
+                    isFlashing = false;
+                    // Base color with brightness applied
+                    uint8_t br = (red * brightness) / 255;
+                    uint8_t bg = (green * brightness) / 255;
+                    uint8_t bb = (blue * brightness) / 255;
+                    uint32_t baseColor = strips[0].Color(br, bg, bb);
+                    for (int i = 0; i < numberLEDs; i++) {
+                        for (int s = 0; s < NUM_STRIPS; s++) {
+                            strips[s].setPixelColor(i, baseColor);
+                        }
+                    }
+                }
+            }
+            break;
+
+        case 6:
+            // Gradient along strip — full rainbow mapped across strip length
+            hue++;
+            for (int j = 0; j < numberLEDs; j++) {
+                uint8_t pixelHue = (uint8_t)((hue / 4) + (j * 256 / numberLEDs));
+                uint32_t color = applyBrightness(hsvToRgb(pixelHue, 255, 255));
+                for (int s = 0; s < NUM_STRIPS; s++) {
+                    strips[s].setPixelColor(j, color);
+                }
             }
             break;
 
